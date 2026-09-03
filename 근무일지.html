@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>근무일지 생성기</title>
+<style>
+  /*
+   * =============================================
+   * 구글 폰트 불러오기
+   * IBM Plex Mono : 날짜/코드 스타일 고정폭 글꼴
+   * Noto Sans KR  : 한글 본문용 글꼴
+   * =============================================
+   */
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+  /*
+   * =============================================
+   * CSS 변수 (디자인 토큰)
+   * :root 에 선언하면 페이지 전체에서 var(--이름)으로 재사용
+   * 색상 하나를 바꾸면 전체가 바뀌므로 유지보수가 쉬움
+   * =============================================
+   */
+  :root {
+    --bg:         #0f1117; /* 페이지 배경 (가장 어두운 색) */
+    --surface:    #1a1d27; /* 카드 배경 */
+    --border:     #2a2d3a; /* 테두리 */
+    --accent:     #4f8ef7; /* 강조색 (파란색) */
+    --accent-dim: #2a3f6f; /* 강조색 어두운 버전 (선택 배경) */
+    --text:       #e2e4ec; /* 기본 글자색 */
+    --text-dim:   #6b7099; /* 흐린 글자색 (레이블 등) */
+    --mono:       'IBM Plex Mono', monospace;
+    --sans:       'Noto Sans KR', sans-serif;
+    --success:    #3ecf6e; /* 복사 완료 초록색 */
+
+    /* 근무 종류별 배경색 */
+    --색-휴무: #3a3d4a;
+    --색-야간: #1e2a4a;
+    --색-오후: #1e3a2a;
+    --색-오전: #3a2a1e;
+  }
+
+  /* 모든 요소의 박스 크기 계산 방식 통일, 기본 마진/패딩 제거 */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* 페이지 전체 레이아웃: 세로 중앙 정렬 */
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;           /* flexbox로 자식 요소 배치 */
+    flex-direction: column;  /* 세로 방향으로 쌓기 */
+    align-items: center;     /* 가로 중앙 정렬 */
+    padding: 32px 16px 64px;
+  }
+
+  /* 상단 타이틀 영역 */
+  header { text-align: center; margin-bottom: 36px; }
+  header h1 {
+    font-family: var(--mono);
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  header p { font-size: 0.8rem; color: var(--text-dim); letter-spacing: 0.05em; }
+
+  /* 카드 (둥근 박스) */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 520px;  /* 최대 너비 제한 */
+    margin-bottom: 20px;
+  }
+
+  /* 카드 안의 섹션 제목 */
+  .card-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    text-transform: uppercase; /* 소문자 → 대문자로 표시 */
+    margin-bottom: 16px;
+  }
+
+  /* 년/월 드롭다운 가로 배치 */
+  .pickers { display: flex; gap: 12px; }
+  .picker-group { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .picker-group label { font-size: 0.75rem; color: var(--text-dim); font-family: var(--mono); }
+
+  /* select (드롭다운) 공통 스타일 */
+  select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 1rem;
+    padding: 10px 12px;
+    width: 100%;
+    cursor: pointer;
+    appearance: none; /* 브라우저 기본 화살표 제거 */
+    /* SVG로 직접 만든 화살표 아이콘을 배경으로 삽입 */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7099' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+
+  /* 근무 입력 영역 */
+  .shift-input-area { margin-top: 4px; }
+  .radio-label { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 10px; display: block; }
+
+  /* 야간/오후/오전/휴무 탭 버튼 줄 */
+  .shift-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .shift-tab {
+    flex: 1;
+    padding: 8px 4px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s; /* 색 변화 부드럽게 */
+  }
+  /* 각 탭 선택 시 활성화 스타일 */
+  .shift-tab.active-야간 { background: var(--색-야간); border-color: #4f7ef7; color: #a0b8ff; }
+  .shift-tab.active-오후 { background: var(--색-오후); border-color: #3ecf6e; color: #90dfa8; }
+  .shift-tab.active-오전 { background: var(--색-오전); border-color: #f0914f; color: #f0c090; }
+  .shift-tab.active-휴무 { background: var(--색-휴무); border-color: #555;    color: #aaa;    }
+
+  /* 1~5 번호 버튼 줄 */
+  .num-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .num-btn {
+    width: 44px; height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .num-btn:hover   { border-color: var(--accent); color: var(--text); }
+  .num-btn.selected { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+  /*
+   * 1일이 휴무일 때 나타나는 "첫 근무일 입력" 행
+   * 기본 display:none → JS에서 selectType('휴무') 호출 시 flex로 변경
+   */
+  .first-shift-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .first-shift-row label { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; font-family: var(--mono); }
+  .first-shift-row select { flex: 1; }
+
+  /* 날짜 숫자 입력 박스 */
+  input[type=number] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 1rem;
+    padding: 10px 12px;
+    width: 70px;
+    text-align: center;
+  }
+  input[type=number]:focus { outline: none; border-color: var(--accent); }
+
+  /*
+   * 1,2일 휴무 옵션 체크박스 행
+   * 기본 display:none → JS에서 selectType('휴무') 호출 시 flex로 변경
+   */
+  .day12-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .day12-option label { font-size: 0.8rem; color: var(--text-dim); font-family: var(--mono); cursor: pointer; }
+
+  /* 체크박스 기본 스타일 약간 키우기 */
+  input[type=checkbox] {
+    width: 16px; height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent); /* 체크 색상 */
+  }
+
+  /* 생성 버튼 */
+  .btn-generate {
+    width: 100%; max-width: 520px;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 1rem; font-weight: 600;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    margin-bottom: 20px;
+  }
+  .btn-generate:hover    { opacity: 0.85; }
+  .btn-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* 결과 카드 */
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 100%; max-width: 520px;
+    overflow: hidden;
+  }
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-title { font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); letter-spacing: 0.1em; }
+
+  /* 복사 버튼 */
+  .btn-copy {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-copy:hover  { background: var(--accent-dim); }
+  .btn-copy.copied { border-color: var(--success); color: var(--success); }
+
+  /* 결과 스크롤 영역 */
+  .result-body { padding: 20px; max-height: 480px; overflow-y: auto; }
+
+  /* 각 날짜 줄 공통 */
+  .day-line {
+    font-family: var(--mono);
+    font-size: 0.88rem;
+    line-height: 1.4;
+    padding: 4px 8px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+  }
+
+  /* 근무 종류별 줄 색상 */
+  .day-야간 { background: var(--색-야간); color: #a0b8ff; }
+  .day-오후 { background: var(--색-오후); color: #90dfa8; }
+  .day-오전 { background: var(--색-오전); color: #f0c090; }
+  .day-휴무 { color: var(--text-dim); }
+
+  /* 제목 줄 (케이비업무일지YYMM) */
+  .day-title {
+    font-family: var(--mono);
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    padding: 4px 8px 14px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+  }
+
+  /* 스크롤바 얇게 */
+  .result-body::-webkit-scrollbar       { width: 4px; }
+  .result-body::-webkit-scrollbar-track { background: transparent; }
+  .result-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>근무일지 생성기</h1>
+  <p>풍쇄 슬래그 야드 · 21일 로테이션</p>
+</header>
+
+<!-- ───────────────────────────────────────────
+     년 · 월 선택 카드
+─────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">년 · 월 선택</div>
+  <div class="pickers">
+    <div class="picker-group">
+      <label>년도</label>
+      <select id="yearPicker"></select>  <!-- JS에서 옵션 자동 생성 -->
+    </div>
+    <div class="picker-group">
+      <label>월</label>
+      <select id="monthPicker"></select> <!-- JS에서 옵션 자동 생성 -->
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────
+     1일 근무 입력 카드
+─────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">1일 근무</div>
+  <div class="shift-input-area">
+
+    <span class="radio-label">근무 종류 선택</span>
+
+    <!-- 야간 / 오후 / 오전 / 휴무 탭 -->
+    <div class="shift-tabs">
+      <div class="shift-tab" id="tab-야간" onclick="selectType('야간')">야간</div>
+      <div class="shift-tab" id="tab-오후" onclick="selectType('오후')">오후</div>
+      <div class="shift-tab" id="tab-오전" onclick="selectType('오전')">오전</div>
+      <div class="shift-tab" id="tab-휴무" onclick="selectType('휴무')">휴무</div>
+    </div>
+
+    <!-- 1~5 번호 버튼 (휴무 선택 시 숨김) -->
+    <div class="num-row" id="numRow">
+      <button class="num-btn" onclick="selectNum(1)">1</button>
+      <button class="num-btn" onclick="selectNum(2)">2</button>
+      <button class="num-btn" onclick="selectNum(3)">3</button>
+      <button class="num-btn" onclick="selectNum(4)">4</button>
+      <button class="num-btn" onclick="selectNum(5)">5</button>
+    </div>
+
+    <!-- 1일이 휴무일 때: 첫 근무일 날짜 + 근무 선택 (기본 숨김) -->
+    <div class="first-shift-row" id="firstShiftRow" style="display:none;">
+      <label>첫 근무일</label>
+      <input type="number" id="firstDay" min="2" max="31" value="3" />
+      <select id="firstType">
+        <option>야간1</option><option>야간2</option><option>야간3</option>
+        <option>야간4</option><option>야간5</option>
+        <option>오후1</option><option>오후2</option><option>오후3</option>
+        <option>오후4</option><option>오후5</option>
+        <option>오전1</option><option>오전2</option><option>오전3</option>
+        <option>오전4</option><option>오전5</option>
+      </select>
+    </div>
+
+    <!--
+      1일이 근무일 때: 1,2일 휴무 옵션 체크박스 (기본 숨김)
+      체크하면 1일·2일을 강제로 휴무 처리하고 3일부터 선택한 근무 적용
+    -->
+    <div class="day12-option" id="day12Option" style="display:none;">
+      <input type="checkbox" id="day12Check" />
+      <label for="day12Check">1, 2일을 휴무로 처리 (3일부터 선택 근무 시작)</label>
+    </div>
+
+  </div>
+</div>
+
+<button class="btn-generate" onclick="generate()">근무일지 생성</button>
+
+<!-- ───────────────────────────────────────────
+     결과 카드 (처음에는 숨김, 생성 후 표시)
+─────────────────────────────────────────── -->
+<div class="result-card" id="resultCard" style="display:none;">
+  <div class="result-header">
+    <span class="result-title" id="resultTitle"></span>
+    <button class="btn-copy" id="copyBtn" onclick="copyResult()">복사</button>
+  </div>
+  <div class="result-body" id="resultBody"></div>
+</div>
+
+<script>
+  /*
+   * =============================================
+   * 로테이션 패턴 (21일 주기)
+   * 배열 인덱스 0~20, 순서대로 하루씩 적용
+   * =============================================
+   */
+  const ROTATION = [
+    '야간1','야간2','야간3','야간4','야간5', // 0~4
+    '휴무','휴무',                            // 5~6
+    '오후1','오후2','오후3','오후4','오후5', // 7~11
+    '휴무','휴무',                            // 12~13
+    '오전1','오전2','오전3','오전4','오전5', // 14~18
+    '휴무',                                   // 19
+    // 20일 후 다시 0(야간1)으로 돌아감 → % 20 으로 순환
+  ];
+  const CYCLE = ROTATION.length; // 20
+
+  /*
+   * 현재 선택된 근무 종류와 번호를 기억하는 변수
+   * 탭 클릭 → selectedType 변경
+   * 번호 클릭 → selectedNum 변경
+   */
+  let selectedType = null;
+  let selectedNum  = null;
+
+  /* ── 년도/월 드롭다운 옵션 자동 생성 ── */
+  const now      = new Date();
+  const yearEl   = document.getElementById('yearPicker');
+  const monthEl  = document.getElementById('monthPicker');
+
+  // 작년부터 3년 후까지 년도 옵션 생성
+  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 3; y++) {
+    const o = document.createElement('option');
+    o.value = y;
+    o.textContent = y + '년';
+    if (y === now.getFullYear()) o.selected = true; // 올해 기본 선택
+    yearEl.appendChild(o);
+  }
+
+  // 1월~12월 옵션 생성
+  for (let m = 1; m <= 12; m++) {
+    const o = document.createElement('option');
+    o.value = m;
+    o.textContent = m + '월';
+    if (m === now.getMonth() + 1) o.selected = true; // 현재 월 기본 선택
+    monthEl.appendChild(o);
+  }
+
+  /*
+   * ── 탭 클릭 시 호출 ──
+   * type: '야간' | '오후' | '오전' | '휴무'
+   */
+  function selectType(type) {
+    selectedType = type;
+    selectedNum  = null; // 번호 선택 초기화
+
+    // 모든 탭의 active 클래스를 제거하고, 선택된 탭에만 active-{type} 추가
+    ['야간','오후','오전','휴무'].forEach(t => {
+      document.getElementById('tab-' + t).className =
+        'shift-tab' + (t === type ? ' active-' + t : '');
+    });
+
+    // 번호 버튼 줄: 휴무면 숨기고, 근무면 보이기
+    document.getElementById('numRow').style.display = type === '휴무' ? 'none' : 'flex';
+
+    // 번호 버튼 선택 상태 초기화
+    document.querySelectorAll('.num-btn').forEach(b => b.classList.remove('selected'));
+
+    // 첫 근무일 입력 행: 휴무일 때만 표시
+    document.getElementById('firstShiftRow').style.display = type === '휴무' ? 'flex' : 'none';
+
+    // 1,2일 휴무 옵션 체크박스: 근무일 때만 표시 (휴무 탭이면 숨김)
+    document.getElementById('day12Option').style.display = type !== '휴무' ? 'flex' : 'none';
+
+    // 탭 전환 시 체크박스는 항상 해제
+    document.getElementById('day12Check').checked = false;
+  }
+
+  /*
+   * ── 번호 버튼 클릭 시 호출 ──
+   * n: 1~5
+   */
+  function selectNum(n) {
+    selectedNum = n;
+    // 모든 번호 버튼을 돌며, 클릭된 번호(인덱스 n-1)만 selected 클래스 추가
+    document.querySelectorAll('.num-btn').forEach((b, i) => {
+      b.classList.toggle('selected', i + 1 === n);
+    });
+  }
+
+  /*
+   * ── 로테이션 배열에서 특정 근무명의 인덱스 반환 ──
+   * 예) findRotationIndex('오전1') → 14
+   * 없으면 -1 반환 (Array.indexOf 기본 동작)
+   */
+  function findRotationIndex(shiftName) {
+    return ROTATION.indexOf(shiftName);
+  }
+
+  /*
+   * ── 근무일지 생성 메인 함수 ──
+   * "근무일지 생성" 버튼 클릭 시 호출
+   */
+  function generate() {
+    const year        = parseInt(yearEl.value);
+    const month       = parseInt(monthEl.value);
+    // new Date(year, month, 0) : month번째 달의 0일 = 전달 마지막 날 → 이 달의 총 일수
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    let startShiftIdx; // 1일의 로테이션 인덱스
+
+    if (selectedType === '휴무') {
+      /*
+       * ── 1일이 휴무인 경우 ──
+       * 사용자가 입력한 "첫 근무일"과 그 근무명을 기준으로
+       * 1일의 로테이션 인덱스를 역산한다.
+       *
+       * 예) 첫 근무일 = 3일, 근무 = 오전1(인덱스14)
+       *   → 1일 인덱스 = 14 - (3 - 1) = 12
+       *   → 즉 1일은 로테이션[12] = 휴무, 2일=로테이션[13]=휴무, 3일=로테이션[14]=오전1 ✓
+       */
+      const fd    = parseInt(document.getElementById('firstDay').value);
+      const ft    = document.getElementById('firstType').value;
+      const ftIdx = findRotationIndex(ft);
+
+      if (ftIdx === -1 || fd < 2 || fd > daysInMonth) {
+        alert('첫 근무일 정보를 확인해주세요.');
+        return;
+      }
+
+      // 나머지 연산(%) 앞에 +CYCLE 하는 이유:
+      // JS에서 음수 % 양수는 음수가 나올 수 있으므로 CYCLE을 더해 항상 양수로 보정
+      startShiftIdx = ((ftIdx - (fd - 1)) % CYCLE + CYCLE) % CYCLE;
+
+    } else {
+      /*
+       * ── 1일이 근무인 경우 ──
+       */
+      if (!selectedType || !selectedNum) {
+        alert('근무 종류와 번호를 선택해주세요.');
+        return;
+      }
+
+      const shiftName = selectedType + selectedNum; // 예: '오후4'
+      const idx       = findRotationIndex(shiftName);
+      if (idx === -1) { alert('해당 근무를 찾을 수 없습니다.'); return; }
+
+      startShiftIdx = idx; // 1일 = 선택한 근무의 인덱스
+    }
+
+    /*
+     * 1,2일 휴무 체크 여부
+     * true이면 1일·2일은 무조건 휴무로 출력하고
+     * 3일부터 selectedType+selectedNum 근무로 시작
+     */
+    const force12Off = document.getElementById('day12Check').checked;
+
+    /* ── 날짜별 줄 데이터 생성 ── */
+    const lines = [];
+    const mm    = String(month).padStart(2, '0'); // 월을 2자리로 (예: 6 → '06')
+    const yy    = String(year).slice(-2);          // 년도 뒤 2자리 (예: 2026 → '26')
+
+    // 제목 줄 (복사 텍스트 첫 번째 줄)
+    lines.push({ text: `케이비업무일지${yy}${mm}`, type: 'title' });
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dd = String(d).padStart(2, '0'); // 일을 2자리로 (예: 3 → '03')
+
+      let shift; // 이 날의 근무명
+
+      if (force12Off && (d === 1 || d === 2)) {
+        /*
+         * 1,2일 강제 휴무 옵션이 켜져 있으면
+         * 1일과 2일은 로테이션 계산 없이 무조건 휴무
+         */
+        shift = '휴무';
+      } else if (force12Off && d === 3) {
+        /*
+         * 3일은 사용자가 선택한 근무명으로 고정
+         * 이후 4일부터는 이 인덱스 기준으로 순환
+         * → startShiftIdx를 3일 기준으로 재계산
+         */
+        const shiftName = selectedType + selectedNum;
+        startShiftIdx   = findRotationIndex(shiftName);
+        shift           = shiftName;
+      } else {
+        /*
+         * 일반 계산:
+         * (시작인덱스 + 경과일수) % 20
+         * force12Off=true 인 경우 d>=3 이므로 d-3 을 더해야 3일=startShiftIdx
+         * force12Off=false 이면 d-1 을 더해야 1일=startShiftIdx
+         */
+        const elapsed = force12Off ? (d - 3) : (d - 1);
+        const rotIdx  = ((startShiftIdx + elapsed) % CYCLE + CYCLE) % CYCLE;
+        shift         = ROTATION[rotIdx];
+      }
+
+      // 줄 데이터 배열에 추가 (날짜 형식: mm/dd)
+      if (shift === '휴무') {
+        lines.push({ text: `${mm}/${dd}. 휴무`, type: '휴무' });
+      } else {
+        // 근무 뒤에 ". 풍쇄는 " (마침표 + 공백 + 풍쇄는 + 공백)
+        lines.push({ text: `${mm}/${dd}. ${shift}. 풍쇄는 `, type: shift.slice(0, 2) });
+        // shift.slice(0,2) : '야간1' → '야간', '오후3' → '오후' (CSS 클래스명에 사용)
+      }
+    }
+
+    /* ── 결과를 화면에 렌더링 ── */
+    const body = document.getElementById('resultBody');
+    body.innerHTML = ''; // 이전 결과 초기화
+
+    lines.forEach(l => {
+      const div = document.createElement('div');
+      // 제목이면 day-title 클래스, 아니면 day-line + day-{종류} 클래스
+      div.className = l.type === 'title' ? 'day-title' : 'day-line day-' + l.type;
+      div.textContent = l.text;
+      body.appendChild(div);
+    });
+
+    // 결과 카드 헤더에 "2026년 8월 · 31일" 표시
+    document.getElementById('resultTitle').textContent = `${year}년 ${month}월 · ${daysInMonth}일`;
+
+    // 결과 카드 표시 (처음엔 display:none)
+    document.getElementById('resultCard').style.display = 'block';
+
+    // 복사 버튼 초기화
+    document.getElementById('copyBtn').textContent = '복사';
+    document.getElementById('copyBtn').className   = 'btn-copy';
+
+    // 결과 카드로 부드럽게 스크롤
+    document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /*
+   * ── 클립보드 복사 함수 ──
+   * "복사" 버튼 클릭 시 호출
+   * 제목 + 날짜 줄을 텍스트로 합쳐 클립보드에 저장
+   */
+  function copyResult() {
+    // day-title과 day-line 클래스를 가진 모든 요소 수집
+    const allEls = document.querySelectorAll('.day-title, .day-line');
+    const parts  = Array.from(allEls);
+    let text = '';
+
+    parts.forEach((el, i) => {
+      if (i === 0) {
+        // 제목 줄: 뒤에 줄바꿈 1개 (날짜 줄과 붙여서 출력)
+        text += el.textContent.trim() + '\n';
+      } else if (i === parts.length - 1) {
+        // 마지막 날짜 줄: 뒤에 아무것도 안 붙임
+        text += el.textContent;
+      } else {
+        // 중간 날짜 줄: 뒤에 빈 줄 1개 (줄바꿈 2개)
+        text += el.textContent + '\n\n';
+      }
+    });
+
+    // 클립보드 API로 복사
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = '복사됨 ✓';
+      btn.className   = 'btn-copy copied';
+      // 2초 후 버튼 원래대로
+      setTimeout(() => {
+        btn.textContent = '복사';
+        btn.className   = 'btn-copy';
+      }, 2000);
+    });
+  }
+</script>
+</body>
+</html>
