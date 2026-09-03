@@ -577,12 +577,12 @@
         shift         = ROTATION[rotIdx];
       }
 
-      // 줄 데이터 배열에 추가
+      // 줄 데이터 배열에 추가 (날짜 형식: mm/dd)
       if (shift === '휴무') {
-        lines.push({ text: `${mm}${dd}. 휴무`, type: '휴무' });
+        lines.push({ text: `${mm}/${dd}. 휴무`, type: '휴무' });
       } else {
         // 근무 뒤에 ". 풍쇄는 " (마침표 + 공백 + 풍쇄는 + 공백)
-        lines.push({ text: `${mm}${dd}. ${shift}. 풍쇄는 `, type: shift.slice(0, 2) });
+        lines.push({ text: `${mm}/${dd}. ${shift}. 풍쇄는 `, type: shift.slice(0, 2) });
         // shift.slice(0,2) : '야간1' → '야간', '오후3' → '오후' (CSS 클래스명에 사용)
       }
     }
